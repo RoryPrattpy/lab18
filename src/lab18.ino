@@ -1,18 +1,62 @@
-/*
- * Project lab18
- * Description:
- * Author:
- * Date:
- */
+SYSTEM_THREAD(ENABLED);
 
-// setup() runs once, when the device is first turned on.
+#define Green 0
+#define Yellow 1
+#define Red 2
+#define YellowStateRed 3
+
+#include "MQTT.h"
+
+void callback(char *topic, byte *payload, unsigned int length);
+
+MQTT client("lab.thewcl.com", 1883, callback);
+
+int currentState = 0;
+char * output;
+int input = 0;
+int counter = 5;
+
+struct State {
+  char* output;
+  unsigned long waitTime;
+  int nextState[4];  // index of state
+};
+
+typedef struct State State_t;
+
+State_t fsm[4] = {
+  {"[0, 2]", 0, {Green, Yellow}},  // Green
+  {"[1, 2]", 5000, {Red, Red}},  // Yellow
+  {"[2, 0]", 0, {YellowStateRed, Red}}, // Red
+  {"[2, 1]", 5000, {Green, Green}} // YellowStateRed
+};
+
 void setup() {
-  // Put initialization like pinMode and begin functions here.
-
+  Serial.begin(9600);
 }
 
-// loop() runs over and over again, as quickly as it can execute.
 void loop() {
-  // The core of your code will likely live here.
+  if (!client.isConnected()) {
+    client.connect(System.deviceID());
+    client.subscribe("HipposAreTasty/CarDirection");
+    return;
+  }
+  client.loop();
 
+  if (counter < 4) {
+    delay(fsm[currentState].waitTime);
+    currentState = fsm[currentState].nextState[input];
+    client.publish("HipposAreTasty/Output", fsm[currentState].output);
+    counter++;
+  }
+}
+
+void callback(char *topic, byte *payload, unsigned int length) {
+  char p[length + 1];
+  memcpy(p, payload, length);
+  p[length] = NULL;
+  input = atoi(p);
+  if (counter >= 4) {
+    counter = 1;
+  }
 }
